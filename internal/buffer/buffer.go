@@ -1,6 +1,8 @@
 // Package buffer provides a growable byte buffer for the parser.
 package buffer
 
+import "github.com/briansumma/cmark/internal/ctype"
+
 // Buffer is a growable byte buffer.
 type Buffer struct {
 	data []byte
@@ -56,6 +58,9 @@ func (b *Buffer) Drop(n int) {
 
 // Truncate sets the buffer length to len.
 func (b *Buffer) Truncate(length int) {
+	if length < 0 {
+		length = 0
+	}
 	if length < len(b.data) {
 		b.data = b.data[:length]
 	}
@@ -63,22 +68,59 @@ func (b *Buffer) Truncate(length int) {
 
 // RTrim removes trailing whitespace.
 func (b *Buffer) RTrim() {
-	// TODO: stub
+	if len(b.data) == 0 {
+		return
+	}
+	for len(b.data) > 0 && ctype.IsSpace(b.data[len(b.data)-1]) {
+		b.data = b.data[:len(b.data)-1]
+	}
 }
 
 // Trim removes leading and trailing whitespace.
 func (b *Buffer) Trim() {
-	// TODO: stub
+	if len(b.data) == 0 {
+		return
+	}
+	var i int
+	for i < len(b.data) && ctype.IsSpace(b.data[i]) {
+		i++
+	}
+	b.Drop(i)
+	b.RTrim()
 }
 
-// NormalizeWhitespace collapses consecutive whitespace.
+// NormalizeWhitespace collapses consecutive whitespace into a single space.
 func (b *Buffer) NormalizeWhitespace() {
-	// TODO: stub
+	lastWasSpace := false
+	w := 0
+	for r := 0; r < len(b.data); r++ {
+		if ctype.IsSpace(b.data[r]) {
+			if !lastWasSpace {
+				b.data[w] = ' '
+				w++
+				lastWasSpace = true
+			}
+		} else {
+			b.data[w] = b.data[r]
+			w++
+			lastWasSpace = false
+		}
+	}
+	b.Truncate(w)
 }
 
-// Unescape removes backslash escapes.
+// Unescape removes backslashes before punctuation chars.
 func (b *Buffer) Unescape() {
-	// TODO: stub
+	w := 0
+	for r := 0; r < len(b.data); r++ {
+		if b.data[r] == '\\' && r+1 < len(b.data) &&
+			ctype.IsPunct(b.data[r+1]) {
+			r++
+		}
+		b.data[w] = b.data[r]
+		w++
+	}
+	b.Truncate(w)
 }
 
 // Bytes returns the buffer contents.

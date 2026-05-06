@@ -1,7 +1,11 @@
 // Package ast defines the CommonMark abstract syntax tree types and operations.
 package ast
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+	"strings"
+)
 
 // NodeType represents the type of a node in the AST.
 type NodeType int
@@ -31,9 +35,27 @@ const (
 	NodeImage
 )
 
+// Sentinel values for block / inline ranges (mirroring C constants).
+const (
+	NodeFirstBlock  = NodeDocument
+	NodeLastBlock   = NodeThematicBreak
+	NodeFirstInline = NodeText
+	NodeLastInline  = NodeImage
+)
+
+// Internal flags.
+const (
+	NodeOpen              = 1 << 0
+	NodeLastLineBlank     = 1 << 1
+	NodeLastLineChecked   = 1 << 2
+	NodeListLastLineBlank = 1 << 3
+)
+
 // NodeTypeString returns a human-readable name for the node type.
 func NodeTypeString(t NodeType) string {
 	switch t {
+	case NodeNone:
+		return "none"
 	case NodeDocument:
 		return "document"
 	case NodeBlockQuote:
@@ -201,13 +223,60 @@ func (n *Node) String() string {
 }
 
 // Dump writes a detailed representation of the subtree to a file-like writer.
-func (n *Node) Dump(w fmt.Stringer, level int) {
-	// TODO: implement tree dump for debugging.
+func (n *Node) Dump(w io.Writer, level int) {
+	if n == nil {
+		return
+	}
+	indent := strings.Repeat("  ", level)
+	fmt.Fprintf(w, "%s%s", indent, NodeTypeString(n.Type))
+	switch n.Type {
+	case NodeText, NodeCode, NodeCodeBlock, NodeHTMLBlock, NodeHTMLInline:
+		if n.Data != "" {
+			fmt.Fprintf(w, " %q", n.Data)
+		}
+	case NodeHeading:
+		if n.HeadingData != nil {
+			fmt.Fprintf(w, " level=%d", n.HeadingData.Level)
+		}
+	case NodeList:
+		if n.ListData != nil {
+			fmt.Fprintf(w, " type=%s tight=%v",
+				listTypeString(n.ListData.ListType), n.ListData.Tight)
+		}
+	}
+	fmt.Fprintf(w, " [%d:%d-%d:%d]\n",
+		n.StartLine, n.StartColumn, n.EndLine, n.EndColumn)
+	for child := n.FirstChild; child != nil; child = child.Next {
+		child.Dump(w, level+1)
+	}
+}
+
+func listTypeString(t ListType) string {
+	switch t {
+	case BulletList:
+		return "bullet"
+	case OrderedList:
+		return "ordered"
+	default:
+		return "none"
+	}
 }
 
 // NewNode creates a new node of the given type.
 func NewNode(t NodeType) *Node {
-	return &Node{Type: t}
+	n := &Node{Type: t}
+	switch t {
+	case NodeHeading:
+		n.HeadingData = &HeadingData{Level: 1}
+	case NodeList:
+		n.ListData = &ListData{
+			ListType:   BulletList,
+			Start:      0,
+			Tight:      false,
+			BulletChar: '*',
+		}
+	}
+	return n
 }
 
 // Free recursively frees a node and its children.
@@ -232,39 +301,130 @@ func (n *Node) Unlink() {
 	n.Next = nil
 }
 
+// canContain reports whether child can be inserted into node.
+func canContain(node, child *Node) bool {
+	if node == nil || child == nil || node == child {
+		return false
+	}
+	// Verify that child is not an ancestor of node.
+	if child.FirstChild != nil {
+		for cur := node.Parent; cur != nil; cur = cur.Parent {
+			if cur == child {
+				return false
+			}
+		}
+	}
+	if child.Type == NodeDocument {
+		return false
+	}
+	switch node.Type {
+	case NodeDocument, NodeBlockQuote, NodeItem:
+		return child.IsBlock() && child.Type != NodeItem
+	case NodeList:
+		return child.Type == NodeItem
+	case NodeCustomBlock:
+		return true
+	case NodeParagraph, NodeHeading, NodeEmph, NodeStrong, NodeLink,
+		NodeImage, NodeCustomInline:
+		return child.IsInline()
+	default:
+		return false
+	}
+}
+
 // InsertBefore inserts sibling before node.
 func (n *Node) InsertBefore(sibling *Node) bool {
-	// TODO: stub
-	return false
+	if n == nil || sibling == nil || n.Parent == nil {
+		return false
+	}
+	if !canContain(n.Parent, sibling) {
+		return false
+	}
+	sibling.Unlink()
+	oldPrev := n.Prev
+	if oldPrev != nil {
+		oldPrev.Next = sibling
+	}
+	sibling.Prev = oldPrev
+	sibling.Next = n
+	n.Prev = sibling
+	parent := n.Parent
+	sibling.Parent = parent
+	if oldPrev == nil && parent != nil {
+		parent.FirstChild = sibling
+	}
+	return true
 }
 
 // InsertAfter inserts sibling after node.
 func (n *Node) InsertAfter(sibling *Node) bool {
-	// TODO: stub
-	return false
+	if n == nil || sibling == nil || n.Parent == nil {
+		return false
+	}
+	if !canContain(n.Parent, sibling) {
+		return false
+	}
+	sibling.Unlink()
+	oldNext := n.Next
+	if oldNext != nil {
+		oldNext.Prev = sibling
+	}
+	sibling.Next = oldNext
+	sibling.Prev = n
+	n.Next = sibling
+	parent := n.Parent
+	sibling.Parent = parent
+	if oldNext == nil && parent != nil {
+		parent.LastChild = sibling
+	}
+	return true
 }
 
 // Replace replaces oldnode with newnode and unlinks oldnode.
 func Replace(oldnode, newnode *Node) bool {
-	// TODO: stub
-	return false
+	if !oldnode.InsertBefore(newnode) {
+		return false
+	}
+	oldnode.Unlink()
+	return true
 }
 
 // PrependChild adds child to the beginning of the children of node.
 func (n *Node) PrependChild(child *Node) bool {
-	// TODO: stub
-	return false
+	if !canContain(n, child) {
+		return false
+	}
+	child.Unlink()
+	oldFirst := n.FirstChild
+	child.Next = oldFirst
+	child.Prev = nil
+	child.Parent = n
+	n.FirstChild = child
+	if oldFirst != nil {
+		oldFirst.Prev = child
+	} else {
+		n.LastChild = child
+	}
+	return true
 }
 
 // AppendChild adds child to the end of the children of node.
 func (n *Node) AppendChild(child *Node) bool {
-	// TODO: stub
-	return false
-}
-
-// ConsolidateTextNodes merges adjacent text nodes.
-func ConsolidateTextNodes(root *Node) {
-	// TODO: stub
+	if !canContain(n, child) {
+		return false
+	}
+	child.Unlink()
+	oldLast := n.LastChild
+	child.Next = nil
+	child.Prev = oldLast
+	child.Parent = n
+	n.LastChild = child
+	if oldLast != nil {
+		oldLast.Next = child
+	} else {
+		n.FirstChild = child
+	}
+	return true
 }
 
 // Iter walks through a tree of nodes.
@@ -281,13 +441,43 @@ type iterState struct {
 
 // NewIter creates a new iterator starting at root.
 func NewIter(root *Node) *Iter {
-	return &Iter{root: root}
+	if root == nil {
+		return nil
+	}
+	return &Iter{
+		root: root,
+		next: iterState{evType: EventEnter, node: root},
+	}
 }
 
 // Next advances to the next node and returns the event type.
 func (it *Iter) Next() EventType {
-	// TODO: stub
-	return EventDone
+	evType := it.next.evType
+	node := it.next.node
+
+	it.cur = it.next
+
+	if evType == EventDone {
+		return evType
+	}
+
+	if evType == EventEnter && !node.IsLeaf() {
+		if node.FirstChild == nil {
+			it.next = iterState{evType: EventExit, node: node}
+		} else {
+			it.next = iterState{evType: EventEnter, node: node.FirstChild}
+		}
+	} else if node == it.root {
+		it.next = iterState{evType: EventDone, node: nil}
+	} else if node.Next != nil {
+		it.next = iterState{evType: EventEnter, node: node.Next}
+	} else if node.Parent != nil {
+		it.next = iterState{evType: EventExit, node: node.Parent}
+	} else {
+		it.next = iterState{evType: EventDone, node: nil}
+	}
+
+	return evType
 }
 
 // GetNode returns the current node.
@@ -305,9 +495,37 @@ func (it *Iter) GetRoot() *Node {
 	return it.root
 }
 
-// Reset resets the iterator to the given node and event type.
+// Reset resets the iterator so that the current node is current and
+// the event type is evType.
 func (it *Iter) Reset(current *Node, evType EventType) {
-	it.cur = iterState{node: current, evType: evType}
+	it.next = iterState{node: current, evType: evType}
+	it.Next()
+}
+
+// ConsolidateTextNodes merges adjacent text nodes.
+func ConsolidateTextNodes(root *Node) {
+	if root == nil {
+		return
+	}
+	it := NewIter(root)
+	for evType := it.Next(); evType != EventDone; evType = it.Next() {
+		cur := it.GetNode()
+		if evType == EventEnter && cur.Type == NodeText &&
+			cur.Next != nil && cur.Next.Type == NodeText {
+			var b strings.Builder
+			b.WriteString(cur.Data)
+			tmp := cur.Next
+			for tmp != nil && tmp.Type == NodeText {
+				it.Next() // advance past tmp
+				b.WriteString(tmp.Data)
+				cur.EndColumn = tmp.EndColumn
+				next := tmp.Next
+				tmp.Unlink()
+				tmp = next
+			}
+			cur.Data = b.String()
+		}
+	}
 }
 
 // Reference is a single link reference entry.
@@ -316,6 +534,9 @@ type Reference struct {
 	URL   string
 	Title string
 }
+
+// MaxLinkLabelLength is the maximum length of a link label.
+const MaxLinkLabelLength = 1000
 
 // Options affect parsing and rendering behavior.
 type Options int
@@ -342,12 +563,79 @@ func NewReferenceMap() *ReferenceMap {
 	return &ReferenceMap{refs: make(map[string]*Reference)}
 }
 
+// isSpace reports whether c is an ASCII whitespace character.
+func isSpace(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '\v', '\f', '\r':
+		return true
+	}
+	return false
+}
+
+// normalizeReference normalizes a reference label by case folding, trimming,
+// and collapsing internal whitespace.  It returns the empty string if the
+// label is composed solely of whitespace.
+func normalizeReference(label string) string {
+	// Case fold.
+	label = strings.ToLower(label)
+	// Trim leading/trailing whitespace.
+	start := 0
+	for start < len(label) && isSpace(label[start]) {
+		start++
+	}
+	end := len(label)
+	for end > start && isSpace(label[end-1]) {
+		end--
+	}
+	label = label[start:end]
+	// Collapse consecutive whitespace to a single space.
+	var b strings.Builder
+	b.Grow(len(label))
+	lastWasSpace := false
+	for i := 0; i < len(label); i++ {
+		c := label[i]
+		if isSpace(c) {
+			if !lastWasSpace && b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			lastWasSpace = true
+		} else {
+			b.WriteByte(c)
+			lastWasSpace = false
+		}
+	}
+	result := b.String()
+	if result == "" {
+		return ""
+	}
+	return result
+}
+
 // Lookup finds a reference by label.
 func (rm *ReferenceMap) Lookup(label string) *Reference {
-	return rm.refs[label]
+	if len(label) < 1 || len(label) > MaxLinkLabelLength {
+		return nil
+	}
+	if rm == nil || len(rm.refs) == 0 {
+		return nil
+	}
+	norm := normalizeReference(label)
+	if norm == "" {
+		return nil
+	}
+	return rm.refs[norm]
 }
 
 // Create adds a reference to the map.
 func (rm *ReferenceMap) Create(label, url, title string) {
-	rm.refs[label] = &Reference{Label: label, URL: url, Title: title}
+	if rm == nil {
+		return
+	}
+	norm := normalizeReference(label)
+	if norm == "" {
+		return
+	}
+	if _, exists := rm.refs[norm]; !exists {
+		rm.refs[norm] = &Reference{Label: norm, URL: url, Title: title}
+	}
 }
