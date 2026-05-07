@@ -52,7 +52,7 @@ func acceptsLines(node *ast.Node) bool {
 
 func containsInlines(node *ast.Node) bool {
 	switch node.Type {
-	case ast.NodeParagraph, ast.NodeHeading, ast.NodeCodeBlock:
+	case ast.NodeParagraph, ast.NodeHeading:
 		return true
 	}
 	return false
@@ -599,6 +599,8 @@ func (p *Parser) addTextToContainer(container, lastMatchedContainer *ast.Node, i
 			matchesEndCondition = scanners.ScanHTMLBlockEnd4(input[p.firstNonspace:]) > 0
 		case 5:
 			matchesEndCondition = scanners.ScanHTMLBlockEnd5(input[p.firstNonspace:]) > 0
+		case 6, 7:
+			matchesEndCondition = p.blank
 		}
 		if matchesEndCondition {
 			container = p.finalize(container)
@@ -664,13 +666,32 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 		p.content.Clear()
 	}
 
-	if node.Type == ast.NodeCodeBlock && node.CodeData != nil && !node.CodeData.Fenced {
-		p.removeTrailingBlankLines()
-		if p.content.Len() == 0 {
-			p.content.AppendByte('\n')
+	if node.Type == ast.NodeCodeBlock && node.CodeData != nil {
+		if !node.CodeData.Fenced {
+			p.removeTrailingBlankLines()
+			if p.content.Len() == 0 {
+				p.content.AppendByte('\n')
+			}
+			node.Data = p.content.String()
+			p.content.Clear()
+		} else {
+			buf := p.content.Bytes()
+			pos := 0
+			for pos < len(buf) && !isLineEndChar(buf[pos]) {
+				pos++
+			}
+			if pos > 0 {
+				node.CodeData.Info = strings.TrimSpace(string(buf[:pos]))
+			}
+			if pos < len(buf) && buf[pos] == '\r' {
+				pos++
+			}
+			if pos < len(buf) && buf[pos] == '\n' {
+				pos++
+			}
+			node.Data = string(buf[pos:])
+			p.content.Clear()
 		}
-		node.Data = p.content.String()
-		p.content.Clear()
 	}
 
 	if node.Type == ast.NodeHeading {
@@ -722,13 +743,15 @@ func (p *Parser) finalizeDocument() {
 // ---------------------------------------------------------------------------
 
 func (p *Parser) addChild(parent *ast.Node, t ast.NodeType, startColumn int) *ast.Node {
+	for !canContainType(parent.Type, t) {
+		parent = p.finalize(parent)
+	}
 	child := ast.NewNode(t)
 	child.Flags |= ast.NodeOpen
 	child.StartLine = p.lineNum
 	child.StartColumn = startColumn
 	child.EndLine = p.lineNum
 	parent.AppendChild(child)
-	p.current = child
 	return child
 }
 
@@ -830,18 +853,30 @@ func (p *Parser) scanThematicBreak(input []byte, offset int) bool {
 	}
 	c := input[offset]
 	if c != '*' && c != '-' && c != '_' {
+		p.thematicBreakKillPos = offset
 		return false
 	}
-	count := 0
-	for i := offset; i < len(input); i++ {
-		ch := input[i]
-		if ch == c {
+	count := 1
+	i := offset
+	var nextc byte
+	for {
+		i++
+		if i >= len(input) {
+			nextc = 0
+			break
+		}
+		nextc = input[i]
+		if nextc == c {
 			count++
-		} else if !isSpaceOrTab(ch) {
-			return false
+		} else if nextc != ' ' && nextc != '\t' {
+			break
 		}
 	}
-	return count >= 3
+	if count >= 3 && (nextc == '\r' || nextc == '\n') {
+		return true
+	}
+	p.thematicBreakKillPos = i
+	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -917,6 +952,20 @@ func (p *Parser) parseListMarkerData(input []byte, offset int, matched int) *ast
 	return data
 }
 
+func canContainType(parentType ast.NodeType, childType ast.NodeType) bool {
+	switch parentType {
+	case ast.NodeDocument, ast.NodeBlockQuote, ast.NodeItem:
+		return childType >= ast.NodeDocument && childType <= ast.NodeThematicBreak && childType != ast.NodeItem
+	case ast.NodeList:
+		return childType == ast.NodeItem
+	case ast.NodeParagraph, ast.NodeHeading, ast.NodeEmph, ast.NodeStrong,
+		ast.NodeLink, ast.NodeImage, ast.NodeCustomInline:
+		return childType >= ast.NodeText && childType <= ast.NodeImage
+	default:
+		return false
+	}
+}
+
 func listsMatch(a, b *ast.ListData) bool {
 	if a == nil || b == nil {
 		return false
@@ -928,9 +977,6 @@ func listsMatch(a, b *ast.ListData) bool {
 		return false
 	}
 	if a.BulletChar != b.BulletChar {
-		return false
-	}
-	if a.Start != b.Start {
 		return false
 	}
 	return true
