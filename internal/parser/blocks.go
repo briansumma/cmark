@@ -743,10 +743,6 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 						node.ListData.Tight = false
 						break
 					}
-					if subchild.Type == ast.NodeParagraph && endsWithBlankLine(subchild) {
-						node.ListData.Tight = false
-						break
-					}
 				}
 				if !node.ListData.Tight {
 					break
