@@ -55,7 +55,7 @@ func renderNode(b *strings.Builder, node *ast.Node, options int, inTightList boo
 		}
 		if node.ListData != nil && node.ListData.ListType == ast.OrderedList {
 			start := ""
-			if node.ListData.Start != 0 && node.ListData.Start != 1 {
+			if node.ListData.Start != 1 {
 				start = " start=\"" + render.Itoa(node.ListData.Start) + "\""
 			}
 			b.WriteString("<ol" + start + ">\n")

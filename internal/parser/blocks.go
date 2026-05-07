@@ -919,6 +919,9 @@ func (p *Parser) parseListMarker(input []byte, offset int, inParagraph bool) int
 			return 1
 		}
 		if offset+1 < len(input) && isLineEndChar(input[offset+1]) {
+			if inParagraph {
+				return 0
+			}
 			return 1
 		}
 		return 0
@@ -937,7 +940,13 @@ func (p *Parser) parseListMarker(input []byte, offset int, inParagraph bool) int
 			return 0
 		}
 		if i < len(input) && (input[i] == '.' || input[i] == ')') {
+			if i+1 < len(input) && isLineEndChar(input[i+1]) && inParagraph {
+				return 0
+			}
 			if i+1 >= len(input) || isSpaceOrTab(input[i+1]) || isLineEndChar(input[i+1]) {
+				if inParagraph && start != 1 {
+					return 0
+				}
 				return i - offset + 1
 			}
 		}
