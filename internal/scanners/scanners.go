@@ -503,12 +503,13 @@ func ScanHTMLBlockStart7(p []byte) int {
 	if len(p) == 0 || p[0] != '<' {
 		return 0
 	}
-	n := ScanHTMLTag(p)
+	// ScanHTMLTag expects input without the leading <
+	n := ScanHTMLTag(p[1:])
 	if n == 0 {
 		return 0
 	}
-	i := n
-	for i < len(p) && (p[i] == '\t' || p[i] == '\n' || p[i] == '\f' || p[i] == ' ') {
+	i := 1 + n // +1 for the skipped <
+	for i < len(p) && (p[i] == ' ' || p[i] == '\t') {
 		i++
 	}
 	if i < len(p) && (p[i] == '\r' || p[i] == '\n') {

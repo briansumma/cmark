@@ -716,6 +716,10 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 	}
 
 	if node.Type == ast.NodeHTMLBlock {
+		// strip trailing newlines (C reference behavior)
+		for p.content.Len() > 0 && p.content.Bytes()[p.content.Len()-1] == '\n' {
+			p.content.Truncate(p.content.Len() - 1)
+		}
 		node.Data = p.content.String()
 		p.content.Clear()
 	}
@@ -729,8 +733,16 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 					node.ListData.Tight = false
 					break
 				}
-				var subchild *ast.Node
-				for subchild = child.LastChild; subchild != nil; subchild = subchild.Prev {
+				for subchild := child.FirstChild; subchild != nil; subchild = subchild.Next {
+					if subchild.Type == ast.NodeHTMLBlock || subchild.Type == ast.NodeCodeBlock ||
+						subchild.Type == ast.NodeHeading {
+						node.ListData.Tight = false
+						break
+					}
+					if subchild.Type == ast.NodeParagraph && subchild.Next != nil {
+						node.ListData.Tight = false
+						break
+					}
 					if subchild.Type == ast.NodeParagraph && endsWithBlankLine(subchild) {
 						node.ListData.Tight = false
 						break
