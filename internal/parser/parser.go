@@ -132,10 +132,11 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 		return 0
 	}
 
-	// Parse URL after ":"
+	// Parse URL (may span multiple lines).  Skip whitespace including
+	// single newlines but stop at a blank line.
 	URLStart := colonPos + 1
-	URLStart += skipSpaces(input[URLStart:])
-	if URLStart >= len(input) {
+	URLStart += skipThroughBlank(input[URLStart:])
+	if URLStart >= len(input) || input[URLStart] == '\n' {
 		return 0
 	}
 
@@ -148,19 +149,29 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 	URL = cleanURL(string(urlBytes))
 	URLEnd = URLStart + urllen
 
-	// Parse optional title
+	// Parse optional title (may also span lines).  The title must be
+	// separated from the URL by at least one whitespace character.
 	titleStart := URLEnd
-	titleStart += skipSpaces(input[titleStart:])
+	titleSkip := skipThroughBlank(input[titleStart:])
+	titleStart += titleSkip
+	titleConsumed := 0
 	title := ""
-	if titleStart < len(input) {
+	if titleSkip > 0 && titleStart < len(input) && input[titleStart] != '\n' {
 		c := input[titleStart]
 		if c == '"' || c == '\'' || c == '(' {
 			titleLen := scanners.ScanLinkTitle(input[titleStart:])
 			if titleLen > 0 {
 				title = cleanTitle(string(input[titleStart : titleStart+titleLen]))
-				titleStart += titleLen
+				titleConsumed = titleLen
 			}
 		}
+	}
+	if titleConsumed > 0 {
+		titleStart += titleConsumed
+	} else if titleSkip == 0 && URLEnd < len(input) && !isWhitespaceOrBlank(input[URLEnd:]) {
+		// No whitespace between URL and next content, and the next
+		// content is not blank → not a valid definition.
+		return 0
 	}
 
 	// Skip trailing whitespace and blank lines
@@ -177,10 +188,62 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 	return end
 }
 
+func isWhitespaceOrBlank(input []byte) bool {
+	for i := 0; i < len(input); i++ {
+		c := input[i]
+		if c == '\n' || c == '\r' {
+			// blank line → valid termination
+			if i+1 < len(input) && c == '\r' && input[i+1] == '\n' {
+				i++
+			}
+			return true
+		}
+		if c != ' ' && c != '\t' {
+			return false
+		}
+	}
+	return true
+}
+
 func skipSpaces(input []byte) int {
 	i := 0
 	for i < len(input) && (input[i] == ' ' || input[i] == '\t') {
 		i++
+	}
+	return i
+}
+
+// skipThroughBlank skips spaces, tabs, and single newlines (line
+// continuations) but stops at a blank line or EOF.
+func skipThroughBlank(input []byte) int {
+	i := 0
+	newlines := 0
+	for i < len(input) {
+		c := input[i]
+		if c == '\r' {
+			i++
+			if i < len(input) && input[i] == '\n' {
+				i++
+			}
+			newlines++
+			if newlines >= 2 {
+				return i
+			}
+			continue
+		}
+		if c == '\n' {
+			i++
+			newlines++
+			if newlines >= 2 {
+				return i
+			}
+			continue
+		}
+		if c == ' ' || c == '\t' {
+			i++
+			continue
+		}
+		break
 	}
 	return i
 }

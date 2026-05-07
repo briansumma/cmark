@@ -467,9 +467,6 @@ func cleanURL(urlStr string) string {
 	// decode entities, then percent-encode non-ASCII
 	raw := b.String()
 	decoded := html.UnescapeString(raw)
-	if decoded == raw {
-		return raw // no entities to decode
-	}
 	return percentEncodeURL(decoded)
 }
 
