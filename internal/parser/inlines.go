@@ -776,7 +776,10 @@ func handlePointyBrace(subj *subject, parent *ast.Node, options ast.Options) *as
 		url := string(subj.input[subj.pos : subj.pos+autolinkLen-1])
 		subj.pos += autolinkLen
 		link := ast.NewNode(ast.NodeLink)
-		link.LinkData = &ast.LinkData{URL: url}
+		link.LinkData = &ast.LinkData{URL: percentEncodeURL(url)}
+		text := ast.NewNode(ast.NodeText)
+		text.Data = url
+		link.AppendChild(text)
 		parent.AppendChild(link)
 		return link
 	}
@@ -787,6 +790,9 @@ func handlePointyBrace(subj *subject, parent *ast.Node, options ast.Options) *as
 		subj.pos += autolinkLen
 		link := ast.NewNode(ast.NodeLink)
 		link.LinkData = &ast.LinkData{URL: "mailto:" + email}
+		text := ast.NewNode(ast.NodeText)
+		text.Data = email
+		link.AppendChild(text)
 		parent.AppendChild(link)
 		return link
 	}

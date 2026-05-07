@@ -215,8 +215,5 @@ func IsSpace(r rune) bool {
 
 // IsPunctuationOrSymbol reports whether r is punctuation or a symbol.
 func IsPunctuationOrSymbol(r rune) bool {
-	if r < 128 {
-		return unicode.IsPunct(rune(r))
-	}
 	return unicode.IsPunct(rune(r)) || unicode.Is(unicode.S, rune(r))
 }

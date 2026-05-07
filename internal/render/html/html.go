@@ -180,9 +180,7 @@ func renderInline(b *strings.Builder, node *ast.Node, options int) {
 			b.WriteString(escapeHTML(node.LinkData.URL))
 		}
 		b.WriteString("\" alt=\"")
-		for child := node.FirstChild; child != nil; child = child.Next {
-			renderInline(b, child, options)
-		}
+		b.WriteString(escapeHTML(plainTextContent(node)))
 		b.WriteString("\"")
 		if node.LinkData != nil && node.LinkData.Title != "" {
 			b.WriteString(" title=\"")
@@ -195,3 +193,21 @@ func renderInline(b *strings.Builder, node *ast.Node, options int) {
 	}
 }
 
+
+// plainTextContent returns the concatenated plain text of all descendant
+// text nodes, without any HTML markup.
+func plainTextContent(node *ast.Node) string {
+	var b strings.Builder
+	collectText(&b, node)
+	return b.String()
+}
+
+func collectText(b *strings.Builder, node *ast.Node) {
+	for child := node.FirstChild; child != nil; child = child.Next {
+		if child.Type == ast.NodeText {
+			b.WriteString(child.Data)
+		} else {
+			collectText(b, child)
+		}
+	}
+}
