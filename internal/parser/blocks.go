@@ -916,6 +916,13 @@ func (p *Parser) parseListMarker(input []byte, offset int, inParagraph bool) int
 	c := input[offset]
 	if c == '*' || c == '-' || c == '+' {
 		if offset+1 >= len(input) || isSpaceOrTab(input[offset+1]) {
+			if inParagraph {
+				// need two spaces/tabs after marker to
+				// interrupt a paragraph
+				if offset+2 >= len(input) || !isSpaceOrTab(input[offset+2]) {
+					return 0
+				}
+			}
 			return 1
 		}
 		if offset+1 < len(input) && isLineEndChar(input[offset+1]) {
