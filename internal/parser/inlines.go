@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"fmt"
+	"html"
 	"strings"
 
 	"github.com/briansumma/cmark/internal/scanners"
@@ -449,19 +451,47 @@ func scanLinkURLPlain(input []byte, offset int) (int, []byte) {
 	return i - offset, input[offset:i]
 }
 
-func cleanURL(url string) string {
-	url = strings.TrimSpace(url)
+func cleanURL(urlStr string) string {
+	urlStr = strings.TrimSpace(urlStr)
+	// unescape backslashes
 	var b strings.Builder
-	b.Grow(len(url))
-	for i := 0; i < len(url); i++ {
-		if url[i] == '\\' && i+1 < len(url) && isPunct(url[i+1]) {
-			b.WriteByte(url[i+1])
+	b.Grow(len(urlStr))
+	for i := 0; i < len(urlStr); i++ {
+		if urlStr[i] == '\\' && i+1 < len(urlStr) && isPunct(urlStr[i+1]) {
+			b.WriteByte(urlStr[i+1])
 			i++
 		} else {
-			b.WriteByte(url[i])
+			b.WriteByte(urlStr[i])
+		}
+	}
+	// decode entities, then percent-encode non-ASCII
+	raw := b.String()
+	decoded := html.UnescapeString(raw)
+	if decoded == raw {
+		return raw // no entities to decode
+	}
+	return percentEncodeURL(decoded)
+}
+
+func percentEncodeURL(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if isURLSafe(s[i]) {
+			b.WriteByte(s[i])
+		} else {
+			b.WriteString(fmt.Sprintf("%%%02X", s[i]))
 		}
 	}
 	return b.String()
+}
+
+func isURLSafe(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' ||
+		c == '~' || c == '/' || c == ':' || c == '@' || c == '!' ||
+		c == '$' || c == '&' || c == '\'' || c == '(' || c == ')' ||
+		c == '*' || c == '+' || c == ',' || c == ';' || c == '=' ||
+		c == '?' || c == '#'
 }
 
 func cleanTitle(title string) string {
@@ -484,7 +514,8 @@ func cleanTitle(title string) string {
 			b.WriteByte(title[i])
 		}
 	}
-	return b.String()
+	// decode HTML entities
+	return html.UnescapeString(b.String())
 }
 
 func handleCloseBracket(subj *subject, parent *ast.Node) *ast.Node {
@@ -542,12 +573,13 @@ func handleCloseBracket(subj *subject, parent *ast.Node) *ast.Node {
 	var rawLabel string
 	foundLabel := false
 	if !matched {
+			posBeforeLabel := subj.pos
 		rawLabel, foundLabel = linkLabel(subj)
 		if !foundLabel {
-			subj.pos = initialPos
+			subj.pos = posBeforeLabel
 		}
 		if (!foundLabel || rawLabel == "") && !opener.bracketAfter {
-			rawLabel = string(subj.input[opener.position : initialPos-1])
+			rawLabel = string(subj.input[opener.position:initialPos])
 			foundLabel = true
 		}
 		if foundLabel {
@@ -562,7 +594,6 @@ func handleCloseBracket(subj *subject, parent *ast.Node) *ast.Node {
 
 	if !matched {
 		subj.popBracket()
-		subj.pos = initialPos
 		n := makeStr(subj, subj.pos-1, subj.pos-1, "]")
 		parent.AppendChild(n)
 		return n
@@ -779,6 +810,7 @@ func handleEntity(subj *subject, parent *ast.Node) *ast.Node {
 	startPos := subj.pos
 	subj.pos++ // skip &
 
+	// Numeric character reference
 	if subj.peekChar() == '#' {
 		subj.pos++
 		isHex := false
@@ -805,13 +837,22 @@ func handleEntity(subj *subject, parent *ast.Node) *ast.Node {
 		}
 		if subj.pos > numStart && subj.peekChar() == ';' {
 			subj.pos++
-			n := ast.NewNode(ast.NodeHTMLInline)
-			n.Data = string(subj.input[startPos:subj.pos])
+			raw := string(subj.input[startPos:subj.pos])
+			decoded := html.UnescapeString(raw)
+			if decoded == raw {
+				// invalid numeric (e.g., &#0; or overflow) →
+				// replacement character
+				decoded = "�"
+			}
+			n := ast.NewNode(ast.NodeText)
+			n.Data = decoded
 			parent.AppendChild(n)
 			return n
 		}
+		// fall through: numeric without ; or empty → invalid
 	}
 
+	// Named entity reference
 	nameStart := subj.pos
 	for {
 		c := subj.peekChar()
@@ -823,12 +864,15 @@ func handleEntity(subj *subject, parent *ast.Node) *ast.Node {
 	}
 	if subj.pos > nameStart && subj.peekChar() == ';' {
 		subj.pos++
-		n := ast.NewNode(ast.NodeHTMLInline)
-		n.Data = string(subj.input[startPos:subj.pos])
+		raw := string(subj.input[startPos:subj.pos])
+		decoded := html.UnescapeString(raw)
+		n := ast.NewNode(ast.NodeText)
+		n.Data = decoded
 		parent.AppendChild(n)
 		return n
 	}
 
+	// Invalid entity – just output &
 	subj.pos = startPos + 1
 	n := ast.NewNode(ast.NodeText)
 	n.Data = "&"

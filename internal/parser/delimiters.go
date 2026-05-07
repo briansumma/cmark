@@ -70,7 +70,7 @@ func (s *subject) pushBracket(image bool, inl *ast.Node) {
 	b := &bracket{
 		prev:     s.lastBracket,
 		node:     inl,
-		position: s.pos - len(inl.Data),
+		position: s.pos,
 		image:    image,
 		active:   true,
 	}

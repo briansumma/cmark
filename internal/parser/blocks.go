@@ -664,13 +664,23 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 			p.content.Clear()
 			return parent
 		}
+		// strip trailing newlines (C reference behavior)
+		for p.content.Len() > 0 && p.content.Bytes()[p.content.Len()-1] == '\n' {
+			p.content.Truncate(p.content.Len() - 1)
+		}
 		node.Data = p.content.String()
 		p.content.Clear()
 	}
 
 	if node.Type == ast.NodeCodeBlock && node.CodeData != nil {
 		if !node.CodeData.Fenced {
-			p.removeTrailingBlankLines()
+			// trim trailing whitespace but stop at newlines (C rtrim behavior)
+			data := p.content.Bytes()
+			n := len(data)
+			for n > 0 && ctype.IsSpace(data[n-1]) && data[n-1] != '\n' {
+				n--
+			}
+			p.content.Truncate(n)
 			if p.content.Len() == 0 {
 				p.content.AppendByte('\n')
 			}
@@ -697,6 +707,10 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 	}
 
 	if node.Type == ast.NodeHeading {
+		// strip trailing newlines (C reference behavior)
+		for p.content.Len() > 0 && p.content.Bytes()[p.content.Len()-1] == '\n' {
+			p.content.Truncate(p.content.Len() - 1)
+		}
 		node.Data = p.content.String()
 		p.content.Clear()
 	}

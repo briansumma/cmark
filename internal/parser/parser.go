@@ -3,14 +3,17 @@ package parser
 
 import (
 	"io"
+	"strings"
 
 	"github.com/briansumma/cmark/internal/buffer"
+	"github.com/briansumma/cmark/internal/scanners"
 	"github.com/briansumma/cmark/pkg/ast"
 )
 
 const (
 	codeIndent = 4
 	tabStop    = 4
+	maxRefLabelLen = 999
 )
 
 // Parser holds the state of a streaming parser.
@@ -87,9 +90,115 @@ func ParseInlines(parent *ast.Node, refmap *ast.ReferenceMap, options ast.Option
 	parseInlines(parent, refmap, options)
 }
 
-// ParseReferenceInline parses reference definitions from a chunk.
+// ParseReferenceInline parses a reference link definition at the start of
+// input. Returns the number of bytes consumed, or 0 if no definition found.
 func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
-	// TODO: stub
-	return 0
+	if len(input) < 4 || input[0] != '[' {
+		return 0
+	}
+
+	// Parse label: scan past [...] to find "]:"
+	labelStart := 1
+	labelEnd := labelStart
+	var labelBuilder strings.Builder
+	for labelEnd < len(input) {
+		if input[labelEnd] == '\\' && labelEnd+1 < len(input) && isPunct(input[labelEnd+1]) {
+			labelBuilder.WriteByte(input[labelEnd+1])
+			labelEnd += 2
+			continue
+		}
+		if input[labelEnd] == ']' {
+			break
+		}
+		if input[labelEnd] == '\n' || input[labelEnd] == '\r' || input[labelEnd] == '[' {
+			return 0
+		}
+		labelBuilder.WriteByte(input[labelEnd])
+		labelEnd++
+	}
+
+	if labelEnd >= len(input) || input[labelEnd] != ']' {
+		return 0
+	}
+
+	// Check for ":" after "]"
+	colonPos := labelEnd + 1
+	if colonPos >= len(input) || input[colonPos] != ':' {
+		return 0
+	}
+
+	label := labelBuilder.String()
+	if len(label) == 0 || len(label) > maxRefLabelLen {
+		return 0
+	}
+
+	// Parse URL after ":"
+	URLStart := colonPos + 1
+	URLStart += skipSpaces(input[URLStart:])
+	if URLStart >= len(input) {
+		return 0
+	}
+
+	var URL string
+	URLEnd := URLStart
+	urllen, urlBytes := scanLinkURL(input, URLStart)
+	if urlBytes == nil || urllen <= 0 {
+		return 0
+	}
+	URL = cleanURL(string(urlBytes))
+	URLEnd = URLStart + urllen
+
+	// Parse optional title
+	titleStart := URLEnd
+	titleStart += skipSpaces(input[titleStart:])
+	title := ""
+	if titleStart < len(input) {
+		c := input[titleStart]
+		if c == '"' || c == '\'' || c == '(' {
+			titleLen := scanners.ScanLinkTitle(input[titleStart:])
+			if titleLen > 0 {
+				title = cleanTitle(string(input[titleStart : titleStart+titleLen]))
+				titleStart += titleLen
+			}
+		}
+	}
+
+	// Skip trailing whitespace and blank lines
+	end := URLEnd
+	if titleStart > URLEnd {
+		end = titleStart
+	}
+	end += skipSpaces(input[end:])
+	end += skipBlankLines(input[end:])
+
+	// Add to reference map
+	refmap.Create(label, URL, title)
+
+	return end
 }
+
+func skipSpaces(input []byte) int {
+	i := 0
+	for i < len(input) && (input[i] == ' ' || input[i] == '\t') {
+		i++
+	}
+	return i
+}
+
+func skipBlankLines(input []byte) int {
+	i := 0
+	for i < len(input) {
+		if input[i] == '\n' {
+			i++
+			continue
+		}
+		if input[i] == '\r' && i+1 < len(input) && input[i+1] == '\n' {
+			i += 2
+			continue
+		}
+		break
+	}
+	return i
+}
+
 
