@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"html"
 	"strings"
 
 	"github.com/briansumma/cmark/internal/ctype"
@@ -693,7 +694,8 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 				pos++
 			}
 			if pos > 0 {
-				node.CodeData.Info = strings.TrimSpace(string(buf[:pos]))
+				info := strings.TrimSpace(string(buf[:pos]))
+				node.CodeData.Info = html.UnescapeString(info)
 			}
 			if pos < len(buf) && buf[pos] == '\r' {
 				pos++

@@ -840,19 +840,28 @@ func handleEntity(subj *subject, parent *ast.Node) *ast.Node {
 		}
 		if subj.pos > numStart && subj.peekChar() == ';' {
 			subj.pos++
-			raw := string(subj.input[startPos:subj.pos])
-			decoded := html.UnescapeString(raw)
-			if decoded == raw {
-				// invalid numeric (e.g., &#0; or overflow) →
-				// replacement character
-				decoded = "�"
+			raw := string(subj.input[numStart:subj.pos-1])
+			val, ok := parseEntityNum(raw, isHex)
+			if ok && val > 0 && val <= 0x10FFFF &&
+				(val < 0xD800 || val > 0xDFFF) {
+				decoded := string([]rune{rune(val)})
+				n := ast.NewNode(ast.NodeText)
+				n.Data = decoded
+				parent.AppendChild(n)
+			} else if ok && val == 0 {
+				n := ast.NewNode(ast.NodeText)
+				n.Data = "�"
+				parent.AppendChild(n)
+			} else {
+				subj.pos = startPos + 1
+				txt := ast.NewNode(ast.NodeText)
+				txt.Data = "&"
+				parent.AppendChild(txt)
+				return txt
 			}
-			n := ast.NewNode(ast.NodeText)
-			n.Data = decoded
-			parent.AppendChild(n)
-			return n
+			return nil
 		}
-		// fall through: numeric without ; or empty → invalid
+				// fall through: numeric without ; or empty → invalid
 	}
 
 	// Named entity reference
@@ -881,6 +890,33 @@ func handleEntity(subj *subject, parent *ast.Node) *ast.Node {
 	n.Data = "&"
 	parent.AppendChild(n)
 	return n
+}
+
+
+func parseEntityNum(s string, isHex bool) (int, bool) {
+	n := 0
+	base := 10
+	if isHex {
+		base = 16
+	}
+	for _, c := range s {
+		var d int
+		switch {
+		case c >= '0' && c <= '9':
+			d = int(c - '0')
+		case isHex && c >= 'a' && c <= 'f':
+			d = int(c - 'a' + 10)
+		case isHex && c >= 'A' && c <= 'F':
+			d = int(c - 'A' + 10)
+		default:
+			return 0, false
+		}
+		if n > (0x10FFFF-d)/base {
+			return 0, false // overflow
+		}
+		n = n*base + d
+	}
+	return n, true
 }
 
 func handleText(subj *subject, parent *ast.Node) *ast.Node {
