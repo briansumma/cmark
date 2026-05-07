@@ -132,27 +132,38 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 		return 0
 	}
 
-	// Parse URL (may span multiple lines).  Skip whitespace including
-	// single newlines but stop at a blank line.
+	// Parse URL.  First try on the same line as the label.
 	URLStart := colonPos + 1
-	URLStart += skipThroughBlank(input[URLStart:])
-	if URLStart >= len(input) || input[URLStart] == '\n' {
-		return 0
-	}
-
-	var URL string
-	URLEnd := URLStart
+	sameLineSpaces := skipSpaces(input[URLStart:])
+	URLStart += sameLineSpaces
+	urlOnNextLine := false
 	urllen, urlBytes := scanLinkURL(input, URLStart)
 	if urlBytes == nil || urllen <= 0 {
-		return 0
+		// URL not on same line – try next line
+		URLStart = colonPos + 1
+		URLStart += skipThroughBlank(input[URLStart:])
+		if URLStart >= len(input) || input[URLStart] == '\n' {
+			return 0
+		}
+		urllen, urlBytes = scanLinkURL(input, URLStart)
+		if urlBytes == nil || urllen <= 0 {
+			return 0
+		}
+		urlOnNextLine = true
 	}
-	URL = cleanURL(string(urlBytes))
-	URLEnd = URLStart + urllen
+	URL := cleanURL(string(urlBytes))
+	URLEnd := URLStart + urllen
 
-	// Parse optional title (may also span lines).  The title must be
-	// separated from the URL by at least one whitespace character.
+	// Parse optional title.  If URL was on same line as label,
+	// title must also be on the same line.  If URL was on next
+	// line, title can be on same or next line.
 	titleStart := URLEnd
-	titleSkip := skipThroughBlank(input[titleStart:])
+	titleSkip := 0
+	if urlOnNextLine {
+		titleSkip = skipThroughBlank(input[titleStart:])
+	} else {
+		titleSkip = skipSpaces(input[titleStart:])
+	}
 	titleStart += titleSkip
 	titleConsumed := 0
 	title := ""
@@ -168,13 +179,14 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 	}
 	if titleConsumed > 0 {
 		titleStart += titleConsumed
+		rest := input[titleStart:]
+		if !isWhitespaceOrBlank(rest) {
+			return 0
+		}
 	} else if titleSkip == 0 && URLEnd < len(input) && !isWhitespaceOrBlank(input[URLEnd:]) {
-		// No whitespace between URL and next content, and the next
-		// content is not blank → not a valid definition.
 		return 0
 	}
 
-	// Skip trailing whitespace and blank lines
 	end := URLEnd
 	if titleStart > URLEnd {
 		end = titleStart
@@ -182,7 +194,6 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 	end += skipSpaces(input[end:])
 	end += skipBlankLines(input[end:])
 
-	// Add to reference map
 	refmap.Create(label, URL, title)
 
 	return end

@@ -470,10 +470,20 @@ func cleanURL(urlStr string) string {
 	return percentEncodeURL(decoded)
 }
 
+
+func isHex(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
 func percentEncodeURL(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
-		if isURLSafe(s[i]) {
+		if s[i] == '%' && i+2 < len(s) && isHex(s[i+1]) && isHex(s[i+2]) {
+			b.WriteByte('%')
+			b.WriteByte(s[i+1])
+			b.WriteByte(s[i+2])
+			i += 2
+		} else if isURLSafe(s[i]) && s[i] != '%' {
 			b.WriteByte(s[i])
 		} else {
 			b.WriteString(fmt.Sprintf("%%%02X", s[i]))
