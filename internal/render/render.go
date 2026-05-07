@@ -52,3 +52,26 @@ func Render(root *ast.Node, options int, width int,
 	// TODO: stub
 	return ""
 }
+
+// Itoa converts an integer to its decimal string representation.
+func Itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var digits [32]byte
+	i := len(digits) - 1
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	for n > 0 {
+		digits[i] = byte('0' + n%10)
+		n /= 10
+		i--
+	}
+	if neg {
+		digits[i] = '-'
+		i--
+	}
+	return string(digits[i+1:])
+}

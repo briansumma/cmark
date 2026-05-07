@@ -3,6 +3,7 @@ package html
 import (
 	"strings"
 
+	"github.com/briansumma/cmark/internal/render"
 	"github.com/briansumma/cmark/pkg/ast"
 )
 
@@ -55,7 +56,7 @@ func renderNode(b *strings.Builder, node *ast.Node, options int, inTightList boo
 		if node.ListData != nil && node.ListData.ListType == ast.OrderedList {
 			start := ""
 			if node.ListData.Start != 0 && node.ListData.Start != 1 {
-				start = " start=\"" + itoa(node.ListData.Start) + "\""
+				start = " start=\"" + render.Itoa(node.ListData.Start) + "\""
 			}
 			b.WriteString("<ol" + start + ">\n")
 		} else {
@@ -194,24 +195,3 @@ func renderInline(b *strings.Builder, node *ast.Node, options int) {
 	}
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var digits [32]byte
-	i := len(digits) - 1
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	for n > 0 {
-		digits[i] = byte('0' + n%10)
-		n /= 10
-		i--
-	}
-	if neg {
-		digits[i] = '-'
-		i--
-	}
-	return string(digits[i+1:])
-}
