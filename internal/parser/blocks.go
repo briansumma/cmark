@@ -150,7 +150,9 @@ func addLine(input []byte, p *Parser) {
 			p.content.AppendByte(' ')
 		}
 	}
-	p.content.Append(input[p.offset:])
+	if p.offset < len(input) {
+		p.content.Append(input[p.offset:])
+	}
 }
 
 func (p *Parser) removeTrailingBlankLines() {

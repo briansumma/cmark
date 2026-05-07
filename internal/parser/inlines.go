@@ -829,7 +829,7 @@ func handleEntity(subj *subject, parent *ast.Node) *ast.Node {
 		return n
 	}
 
-	subj.pos = startPos
+	subj.pos = startPos + 1
 	n := ast.NewNode(ast.NodeText)
 	n.Data = "&"
 	parent.AppendChild(n)

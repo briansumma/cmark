@@ -25,13 +25,10 @@ func VersionString() string {
 	return "0.31.2"
 }
 
-// MarkdownToHTML converts a CommonMark document to HTML.
-func MarkdownToHTML(text []byte, options ast.Options) (string, error) {
-	root, err := parser.ParseDocument(text, options)
-	if err != nil {
-		return "", err
-	}
-	return html.RenderHTML(root, int(options)), nil
+// MarkdownToHTML parses a CommonMark document and renders it as HTML.
+func MarkdownToHTML(text string, options ast.Options) string {
+	root, _ := parser.ParseDocument([]byte(text), options)
+	return html.RenderHTML(root, int(options))
 }
 
 // ParseDocument parses a CommonMark document from a byte slice.
