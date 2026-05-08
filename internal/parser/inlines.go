@@ -527,8 +527,8 @@ func cleanTitle(title string) string {
 }
 
 func handleCloseBracket(subj *subject, parent *ast.Node) *ast.Node {
-	initialPos := subj.pos
 	subj.pos++ // advance past ]
+	initialPos := subj.pos
 
 	opener := subj.lastBracket
 	if opener == nil {
@@ -538,7 +538,7 @@ func handleCloseBracket(subj *subject, parent *ast.Node) *ast.Node {
 	}
 
 	isImage := opener.image
-	if !isImage && subj.noLinkOpeners {
+	if !opener.active {
 		subj.popBracket()
 		n := makeStr(subj, subj.pos-1, subj.pos-1, "]")
 		parent.AppendChild(n)
@@ -587,7 +587,7 @@ func handleCloseBracket(subj *subject, parent *ast.Node) *ast.Node {
 			subj.pos = posBeforeLabel
 		}
 		if (!foundLabel || rawLabel == "") && !opener.bracketAfter {
-			rawLabel = string(subj.input[opener.position:initialPos])
+			rawLabel = string(subj.input[opener.position:initialPos-1])
 			foundLabel = true
 		}
 		if foundLabel {
@@ -602,7 +602,7 @@ func handleCloseBracket(subj *subject, parent *ast.Node) *ast.Node {
 
 	if !matched {
 		subj.popBracket()
-		subj.noLinkOpeners = true
+		subj.pos = initialPos
 		n := makeStr(subj, subj.pos-1, subj.pos-1, "]")
 		parent.AppendChild(n)
 		return n
@@ -631,8 +631,14 @@ func handleCloseBracket(subj *subject, parent *ast.Node) *ast.Node {
 	processEmphasis(subj, opener.position)
 	subj.popBracket()
 
+	// If this was a link (not image), deactivate earlier link brackets
+	// to prevent nested links.
 	if !isImage {
-		subj.noLinkOpeners = true
+		for b := subj.lastBracket; b != nil; b = b.prev {
+			if !b.image {
+				b.active = false
+			}
+		}
 	}
 	return nil
 }

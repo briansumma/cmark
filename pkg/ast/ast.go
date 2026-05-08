@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // NodeType represents the type of a node in the AST.
@@ -563,6 +565,40 @@ func NewReferenceMap() *ReferenceMap {
 	return &ReferenceMap{refs: make(map[string]*Reference)}
 }
 
+// unicodeCaseFold performs full Unicode case folding (e.g. ẞ → ss).
+func unicodeCaseFold(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r < 128 {
+			if r >= 'A' && r <= 'Z' {
+				r += 'a' - 'A'
+			}
+			b.WriteByte(byte(r))
+		} else {
+			if expanded, ok := caseFoldExpand[r]; ok {
+				b.WriteString(expanded)
+			} else {
+				b.WriteRune(unicode.ToLower(r))
+			}
+		}
+		i += size
+	}
+	return b.String()
+}
+
+var caseFoldExpand = map[rune]string{
+	0x00DF: "ss", 0x0130: "i̇", 0x0149: "ʼn",
+	0x01F0: "ǰ", 0x0390: "ΐ",
+	0x03B0: "ΰ", 0x0587: "եւ",
+	0x1E96: "ẖ", 0x1E97: "ẗ", 0x1E98: "ẘ",
+	0x1E99: "ẙ", 0x1E9A: "aʾ", 0x1E9E: "ss",
+	0x1F50: "ὐ",
+	0xFB00: "ff", 0xFB01: "fi", 0xFB02: "fl",
+	0xFB03: "ffi", 0xFB04: "ffl", 0xFB05: "st", 0xFB06: "st",
+}
+
 // isSpace reports whether c is an ASCII whitespace character.
 func isPunct(c byte) bool {
 	return (c >= '!' && c <= '/') || (c >= ':' && c <= '@') ||
@@ -581,8 +617,8 @@ func isSpace(c byte) bool {
 // and collapsing internal whitespace.  It returns the empty string if the
 // label is composed solely of whitespace.
 func normalizeReference(label string) string {
-	// Case fold.
-	label = strings.ToLower(label)
+	// Case fold (full Unicode case folding).
+	label = unicodeCaseFold(label)
 	// Trim leading/trailing whitespace.
 	start := 0
 	for start < len(label) && isSpace(label[start]) {
@@ -599,12 +635,7 @@ func normalizeReference(label string) string {
 	lastWasSpace := false
 	for i := 0; i < len(label); i++ {
 		c := label[i]
-		if c == '\\' && i+1 < len(label) && isPunct(label[i+1]) {
-			i++ // skip backslash
-			c = label[i]
-			b.WriteByte(c)
-			lastWasSpace = false
-		} else if isSpace(c) {
+		if isSpace(c) {
 			if !lastWasSpace && b.Len() > 0 {
 				b.WriteByte(' ')
 			}
