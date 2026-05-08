@@ -564,6 +564,11 @@ func NewReferenceMap() *ReferenceMap {
 }
 
 // isSpace reports whether c is an ASCII whitespace character.
+func isPunct(c byte) bool {
+	return (c >= '!' && c <= '/') || (c >= ':' && c <= '@') ||
+		(c >= '[' && c <= '`') || (c >= '{' && c <= '~')
+}
+
 func isSpace(c byte) bool {
 	switch c {
 	case ' ', '\t', '\n', '\v', '\f', '\r':
@@ -588,13 +593,18 @@ func normalizeReference(label string) string {
 		end--
 	}
 	label = label[start:end]
-	// Collapse consecutive whitespace to a single space.
+	// Resolve backslash escapes and collapse whitespace.
 	var b strings.Builder
 	b.Grow(len(label))
 	lastWasSpace := false
 	for i := 0; i < len(label); i++ {
 		c := label[i]
-		if isSpace(c) {
+		if c == '\\' && i+1 < len(label) && isPunct(label[i+1]) {
+			i++ // skip backslash
+			c = label[i]
+			b.WriteByte(c)
+			lastWasSpace = false
+		} else if isSpace(c) {
 			if !lastWasSpace && b.Len() > 0 {
 				b.WriteByte(' ')
 			}
