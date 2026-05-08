@@ -44,7 +44,7 @@ func renderNode(b *strings.Builder, node *ast.Node, options int, inTightList boo
 	case ast.NodeBlockQuote:
 		b.WriteString("<blockquote>\n")
 		for child := node.FirstChild; child != nil; child = child.Next {
-			renderNode(b, child, options, inTightList)
+			renderNode(b, child, options, false)
 		}
 		b.WriteString("</blockquote>\n")
 

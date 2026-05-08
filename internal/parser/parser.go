@@ -128,6 +128,9 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 	if len(label) == 0 || len(label) > maxRefLabelLen {
 		return 0
 	}
+	if strings.TrimSpace(label) == "" {
+		return 0
+	}
 
 	// Parse URL.  First try on the same line as the label.
 	URLStart := colonPos + 1
@@ -173,17 +176,21 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 		}
 	}
 	if titleConsumed > 0 {
-		titleStart += titleConsumed
-		rest := input[titleStart:]
+		titleEnd := titleStart + titleConsumed
+		rest := input[titleEnd:]
 		if !isWhitespaceOrBlank(rest) {
-			return 0
+			titleConsumed = 0
+			title = ""
+		} else {
+			titleStart = titleEnd
 		}
-	} else if URLEnd < len(input) && !isWhitespaceOrBlank(input[URLEnd:]) {
+	}
+	if titleConsumed == 0 && URLEnd < len(input) && !isWhitespaceOrBlank(input[URLEnd:]) {
 		return 0
 	}
 
 	end := URLEnd
-	if titleStart > URLEnd {
+	if titleConsumed > 0 {
 		end = titleStart
 	}
 	end += skipSpaces(input[end:])
