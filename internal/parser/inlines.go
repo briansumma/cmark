@@ -602,6 +602,7 @@ func handleCloseBracket(subj *subject, parent *ast.Node) *ast.Node {
 
 	if !matched {
 		subj.popBracket()
+		subj.noLinkOpeners = true
 		n := makeStr(subj, subj.pos-1, subj.pos-1, "]")
 		parent.AppendChild(n)
 		return n
