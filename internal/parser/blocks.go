@@ -19,6 +19,20 @@ func isLineEndChar(c byte) bool {
 	return c == '\n' || c == '\r'
 }
 
+func resolveBackslashEscapes(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) && isPunct(s[i+1]) {
+			b.WriteByte(s[i+1])
+			i++
+		} else {
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
+}
+
 func isSpaceOrTab(c byte) bool {
 	return c == ' ' || c == '\t'
 }
@@ -137,13 +151,6 @@ func advanceOffset(p *Parser, input []byte, count int, columns bool) {
 }
 
 func addLine(input []byte, p *Parser) {
-	if p.blank && p.current.Type == ast.NodeCodeBlock {
-		b := p.current
-		if b.CodeData != nil && !b.CodeData.Fenced {
-			// omit trailing blank lines in indented code blocks
-			return
-		}
-	}
 	if p.partiallyConsumedTab {
 		p.offset++
 		charsToTab := tabStop - (p.column % tabStop)
@@ -679,14 +686,10 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 
 	if node.Type == ast.NodeCodeBlock && node.CodeData != nil {
 		if !node.CodeData.Fenced {
-			// trim trailing whitespace but stop at newlines (C rtrim behavior)
-			data := p.content.Bytes()
-			n := len(data)
-			for n > 0 && ctype.IsSpace(data[n-1]) && data[n-1] != '\n' {
-				n--
-			}
-			p.content.Truncate(n)
-			if p.content.Len() == 0 {
+			// strip trailing blank lines from indented code blocks
+			p.removeTrailingBlankLines()
+			// ensure trailing newline
+			if p.content.Len() == 0 || p.content.Bytes()[p.content.Len()-1] != '\n' {
 				p.content.AppendByte('\n')
 			}
 			node.Data = p.content.String()
@@ -699,7 +702,7 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 			}
 			if pos > 0 {
 				info := strings.TrimSpace(string(buf[:pos]))
-				node.CodeData.Info = html.UnescapeString(info)
+				node.CodeData.Info = html.UnescapeString(resolveBackslashEscapes(info))
 			}
 			if pos < len(buf) && buf[pos] == '\r' {
 				pos++
@@ -717,8 +720,13 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 		for p.content.Len() > 0 && p.content.Bytes()[p.content.Len()-1] == '\n' {
 			p.content.Truncate(p.content.Len() - 1)
 		}
-		for p.content.Len() > 0 && p.content.Bytes()[p.content.Len()-1] == ' ' {
-			p.content.Truncate(p.content.Len() - 1)
+		for p.content.Len() > 0 {
+			c := p.content.Bytes()[p.content.Len()-1]
+			if c == ' ' || c == '\t' {
+				p.content.Truncate(p.content.Len() - 1)
+			} else {
+				break
+			}
 		}
 		node.Data = p.content.String()
 		p.content.Clear()
