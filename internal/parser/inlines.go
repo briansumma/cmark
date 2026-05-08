@@ -813,6 +813,66 @@ func handlePointyBrace(subj *subject, parent *ast.Node, options ast.Options) *as
 		return htmlNode
 	}
 
+	// HTML comment: <!-- ... -->
+	if subj.peekChar() == '!' && subj.peekAt(subj.pos+1) == '-' &&
+		subj.peekAt(subj.pos+2) == '-' {
+		m := 0
+		// empty comment: <!--> or <!---> ?
+		if subj.peekAt(subj.pos+3) == '>' {
+			m = 1 + 3 // ! + --->
+		} else if subj.peekAt(subj.pos+3) == '-' && subj.peekAt(subj.pos+4) == '>' {
+			m = 1 + 4 // ! + --->
+		} else {
+			n := scanners.ScanHTMLComment(subj.input[subj.pos+1:])
+			if n > 0 {
+				m = 1 + n // ! + scanned chars (starts at --)
+			}
+		}
+		if m > 0 {
+			subj.pos += m
+			htmlNode := ast.NewNode(ast.NodeHTMLInline)
+			htmlNode.Data = string(subj.input[startPos:subj.pos])
+			parent.AppendChild(htmlNode)
+			return htmlNode
+		}
+	}
+
+	// Processing instruction: <? ... ?>
+	if subj.peekChar() == '?' {
+		m := scanners.ScanHTMLPI(subj.input[subj.pos+1:])
+		if m > 0 {
+			subj.pos += 1 + m
+			htmlNode := ast.NewNode(ast.NodeHTMLInline)
+			htmlNode.Data = string(subj.input[startPos:subj.pos])
+			parent.AppendChild(htmlNode)
+			return htmlNode
+		}
+	}
+
+	// Declaration <! ... > or CDATA <![CDATA[ ... ]]>
+	if subj.peekChar() == '!' {
+		if subj.peekAt(subj.pos+1) == '[' &&
+			strings.HasPrefix(string(subj.input[subj.pos+2:]), "CDATA[") {
+			m := scanners.ScanHTMLCDATA(subj.input[subj.pos+2:])
+			if m > 0 {
+				subj.pos += 2 + m
+				htmlNode := ast.NewNode(ast.NodeHTMLInline)
+				htmlNode.Data = string(subj.input[startPos:subj.pos])
+				parent.AppendChild(htmlNode)
+				return htmlNode
+			}
+		} else {
+			m := scanners.ScanHTMLDeclaration(subj.input[subj.pos+1:])
+			if m > 0 {
+				subj.pos += 1 + m
+				htmlNode := ast.NewNode(ast.NodeHTMLInline)
+				htmlNode.Data = string(subj.input[startPos:subj.pos])
+				parent.AppendChild(htmlNode)
+				return htmlNode
+			}
+		}
+	}
+
 	n := ast.NewNode(ast.NodeText)
 	n.Data = "<"
 	parent.AppendChild(n)
