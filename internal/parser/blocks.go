@@ -669,6 +669,10 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 		for p.content.Len() > 0 && p.content.Bytes()[p.content.Len()-1] == '\n' {
 			p.content.Truncate(p.content.Len() - 1)
 		}
+		// strip trailing spaces (spec: trailing spaces ignored)
+		for p.content.Len() > 0 && p.content.Bytes()[p.content.Len()-1] == ' ' {
+			p.content.Truncate(p.content.Len() - 1)
+		}
 		node.Data = p.content.String()
 		p.content.Clear()
 	}
@@ -709,8 +713,11 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 	}
 
 	if node.Type == ast.NodeHeading {
-		// strip trailing newlines (C reference behavior)
+		// strip trailing newlines and spaces (C reference behavior)
 		for p.content.Len() > 0 && p.content.Bytes()[p.content.Len()-1] == '\n' {
+			p.content.Truncate(p.content.Len() - 1)
+		}
+		for p.content.Len() > 0 && p.content.Bytes()[p.content.Len()-1] == ' ' {
 			p.content.Truncate(p.content.Len() - 1)
 		}
 		node.Data = p.content.String()
