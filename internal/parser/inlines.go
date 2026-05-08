@@ -175,6 +175,7 @@ func handleBackslash(subj *subject, parent *ast.Node) *ast.Node {
 	c := subj.peekChar()
 	if c == '\r' || c == '\n' {
 		subj.skipLineEnd()
+		subj.skipSpaces()
 		br := ast.NewNode(ast.NodeLinebreak)
 		parent.AppendChild(br)
 		return br
