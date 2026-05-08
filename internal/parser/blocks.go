@@ -743,27 +743,22 @@ func (p *Parser) finalize(node *ast.Node) *ast.Node {
 
 	if node.Type == ast.NodeList {
 		node.ListData.Tight = true
-		var child *ast.Node
-		for child = node.FirstChild; child != nil; child = child.Next {
-			if child.Type == ast.NodeItem && child.FirstChild != nil {
-				if lastLineBlank(child) {
+		for child := node.FirstChild; child != nil; child = child.Next {
+			// Check for non-final list item ending with blank line
+			if lastLineBlank(child) && child.Next != nil {
+				node.ListData.Tight = false
+				break
+			}
+			// Recurse into children of list item, looking for
+			// blank lines between or after blocks
+			for subchild := child.FirstChild; subchild != nil; subchild = subchild.Next {
+				if endsWithBlankLine(subchild) && (child.Next != nil || subchild.Next != nil) {
 					node.ListData.Tight = false
 					break
 				}
-				for subchild := child.FirstChild; subchild != nil; subchild = subchild.Next {
-					if subchild.Type == ast.NodeHTMLBlock || subchild.Type == ast.NodeCodeBlock ||
-						subchild.Type == ast.NodeHeading {
-						node.ListData.Tight = false
-						break
-					}
-					if subchild.Type == ast.NodeParagraph && subchild.Next != nil {
-						node.ListData.Tight = false
-						break
-					}
-				}
-				if !node.ListData.Tight {
-					break
-				}
+			}
+			if !node.ListData.Tight {
+				break
 			}
 		}
 	}
@@ -931,13 +926,6 @@ func (p *Parser) parseListMarker(input []byte, offset int, inParagraph bool) int
 	c := input[offset]
 	if c == '*' || c == '-' || c == '+' {
 		if offset+1 >= len(input) || isSpaceOrTab(input[offset+1]) {
-			if inParagraph {
-				// need two spaces/tabs after marker to
-				// interrupt a paragraph
-				if offset+2 >= len(input) || !isSpaceOrTab(input[offset+2]) {
-					return 0
-				}
-			}
 			return 1
 		}
 		if offset+1 < len(input) && isLineEndChar(input[offset+1]) {

@@ -73,8 +73,12 @@ func renderNode(b *strings.Builder, node *ast.Node, options int, inTightList boo
 
 	case ast.NodeItem:
 		b.WriteString("<li>")
-		if !inTightList {
-			b.WriteString("\n")
+		if node.FirstChild != nil {
+			if !inTightList {
+				b.WriteString("\n")
+			} else if node.FirstChild.IsBlock() && node.FirstChild.Type != ast.NodeParagraph {
+				b.WriteString("\n")
+			}
 		}
 		for child := node.FirstChild; child != nil; child = child.Next {
 			renderNode(b, child, options, inTightList)
@@ -101,6 +105,9 @@ func renderNode(b *strings.Builder, node *ast.Node, options int, inTightList boo
 		if inTightList {
 			for child := node.FirstChild; child != nil; child = child.Next {
 				renderInline(b, child, options)
+			}
+			if node.Next != nil {
+				b.WriteString("\n")
 			}
 		} else {
 			b.WriteString("<p>")
