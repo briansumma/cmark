@@ -1,3 +1,10 @@
+# OpenWolf
+
+@.wolf/OPENWOLF.md
+
+This project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md every session. Check .wolf/cerebrum.md before generating code. Check .wolf/anatomy.md before reading files.
+
+
 # cmark — Go rewrite of CommonMark reference parser
 
 Full Go rewrite of the C99 `cmark` CommonMark implementation (spec v0.31.2).
@@ -36,8 +43,7 @@ spec.json                CommonMark 0.31.2 spec tests (652 examples)
 
 - **Branch:** `feature/golang`
 - **Plan:** `~/.claude/plans/fuzzy-bubbling-feather.md`
-- **Current:** ~607/652 (93.1%)
-- **Remaining gaps:** list tight/loose detection (26 tests), link ref-def edge cases
+- **Current:** 652/652 (100%)
 
 ## Gotchas
 
