@@ -100,20 +100,17 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 	// Parse label: scan past [...] to find "]:"
 	labelStart := 1
 	labelEnd := labelStart
-	var labelBuilder strings.Builder
 	for labelEnd < len(input) {
 		if input[labelEnd] == '\\' && labelEnd+1 < len(input) && isPunct(input[labelEnd+1]) {
-			labelBuilder.WriteByte(input[labelEnd+1])
 			labelEnd += 2
 			continue
 		}
 		if input[labelEnd] == ']' {
 			break
 		}
-		if input[labelEnd] == '\n' || input[labelEnd] == '\r' || input[labelEnd] == '[' {
+		if input[labelEnd] == '[' {
 			return 0
 		}
-		labelBuilder.WriteByte(input[labelEnd])
 		labelEnd++
 	}
 
@@ -127,7 +124,7 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 		return 0
 	}
 
-	label := labelBuilder.String()
+	label := string(input[labelStart:labelEnd])
 	if len(label) == 0 || len(label) > maxRefLabelLen {
 		return 0
 	}
@@ -136,7 +133,6 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 	URLStart := colonPos + 1
 	sameLineSpaces := skipSpaces(input[URLStart:])
 	URLStart += sameLineSpaces
-	urlOnNextLine := false
 	urllen, urlBytes := scanLinkURL(input, URLStart)
 	if urlBytes == nil || urllen <= 0 {
 		// URL not on same line – try next line
@@ -149,21 +145,14 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 		if urlBytes == nil || urllen <= 0 {
 			return 0
 		}
-		urlOnNextLine = true
 	}
 	URL := cleanURL(string(urlBytes))
 	URLEnd := URLStart + urllen
 
-	// Parse optional title.  If URL was on same line as label,
-	// title must also be on the same line.  If URL was on next
-	// line, title can be on same or next line.
+	// Parse optional title.  The title can be on the same line
+	// as the URL or on the next line.
 	titleStart := URLEnd
-	titleSkip := 0
-	if urlOnNextLine {
-		titleSkip = skipThroughBlank(input[titleStart:])
-	} else {
-		titleSkip = skipSpaces(input[titleStart:])
-	}
+	titleSkip := skipThroughBlank(input[titleStart:])
 	titleStart += titleSkip
 	titleConsumed := 0
 	title := ""
@@ -171,6 +160,12 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 		c := input[titleStart]
 		if c == '"' || c == '\'' || c == '(' {
 			titleLen := scanners.ScanLinkTitle(input[titleStart:])
+			if titleLen > 0 {
+				titleRaw := string(input[titleStart : titleStart+titleLen])
+				if strings.Contains(titleRaw, "\n\n") || strings.Contains(titleRaw, "\r\n\r\n") {
+					titleLen = 0
+				}
+			}
 			if titleLen > 0 {
 				title = cleanTitle(string(input[titleStart : titleStart+titleLen]))
 				titleConsumed = titleLen
@@ -183,7 +178,7 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 		if !isWhitespaceOrBlank(rest) {
 			return 0
 		}
-	} else if titleSkip == 0 && URLEnd < len(input) && !isWhitespaceOrBlank(input[URLEnd:]) {
+	} else if URLEnd < len(input) && !isWhitespaceOrBlank(input[URLEnd:]) {
 		return 0
 	}
 
@@ -192,7 +187,13 @@ func ParseReferenceInline(input []byte, refmap *ast.ReferenceMap) int {
 		end = titleStart
 	}
 	end += skipSpaces(input[end:])
-	end += skipBlankLines(input[end:])
+	// Skip at most one line ending to terminate this definition
+	if end < len(input) && input[end] == '\r' {
+		end++
+	}
+	if end < len(input) && input[end] == '\n' {
+		end++
+	}
 
 	refmap.Create(label, URL, title)
 
