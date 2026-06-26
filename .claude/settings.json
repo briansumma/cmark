@@ -6,8 +6,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.wolf/hooks/session-start.js\"",
-            "timeout": 5
+            "command": "WOLF_ROOT=$(node -e 'const path = require(\"path\"); const { execSync } = require(\"child_process\"); const cpd = process.env.CLAUDE_PROJECT_DIR; let base = cpd && path.isAbsolute(cpd) ? cpd : process.cwd(); try { const gitDir = execSync(\"git rev-parse --git-common-dir\", { cwd: base, stdio: \"pipe\" }).toString().trim(); base = path.resolve(base, gitDir, \"..\"); } catch (e) { /* not a git repo or git missing — keep base */ } console.log(base);') && node \"$WOLF_ROOT/.wolf/hooks/session-start.js\"",
+            "timeout": 5,
+            "_managedBy": "openwolf"
           }
         ]
       }
@@ -18,8 +19,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.wolf/hooks/pre-read.js\"",
-            "timeout": 5
+            "command": "WOLF_ROOT=$(node -e 'const path = require(\"path\"); const { execSync } = require(\"child_process\"); const cpd = process.env.CLAUDE_PROJECT_DIR; let base = cpd && path.isAbsolute(cpd) ? cpd : process.cwd(); try { const gitDir = execSync(\"git rev-parse --git-common-dir\", { cwd: base, stdio: \"pipe\" }).toString().trim(); base = path.resolve(base, gitDir, \"..\"); } catch (e) { /* not a git repo or git missing — keep base */ } console.log(base);') && node \"$WOLF_ROOT/.wolf/hooks/pre-read.js\"",
+            "timeout": 5,
+            "_managedBy": "openwolf"
           }
         ]
       },
@@ -28,8 +30,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.wolf/hooks/pre-write.js\"",
-            "timeout": 5
+            "command": "WOLF_ROOT=$(node -e 'const path = require(\"path\"); const { execSync } = require(\"child_process\"); const cpd = process.env.CLAUDE_PROJECT_DIR; let base = cpd && path.isAbsolute(cpd) ? cpd : process.cwd(); try { const gitDir = execSync(\"git rev-parse --git-common-dir\", { cwd: base, stdio: \"pipe\" }).toString().trim(); base = path.resolve(base, gitDir, \"..\"); } catch (e) { /* not a git repo or git missing — keep base */ } console.log(base);') && node \"$WOLF_ROOT/.wolf/hooks/pre-write.js\"",
+            "timeout": 5,
+            "_managedBy": "openwolf"
           }
         ]
       }
@@ -40,8 +43,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.wolf/hooks/post-read.js\"",
-            "timeout": 5
+            "command": "WOLF_ROOT=$(node -e 'const path = require(\"path\"); const { execSync } = require(\"child_process\"); const cpd = process.env.CLAUDE_PROJECT_DIR; let base = cpd && path.isAbsolute(cpd) ? cpd : process.cwd(); try { const gitDir = execSync(\"git rev-parse --git-common-dir\", { cwd: base, stdio: \"pipe\" }).toString().trim(); base = path.resolve(base, gitDir, \"..\"); } catch (e) { /* not a git repo or git missing — keep base */ } console.log(base);') && node \"$WOLF_ROOT/.wolf/hooks/post-read.js\"",
+            "timeout": 5,
+            "_managedBy": "openwolf"
           }
         ]
       },
@@ -50,8 +54,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.wolf/hooks/post-write.js\"",
-            "timeout": 10
+            "command": "WOLF_ROOT=$(node -e 'const path = require(\"path\"); const { execSync } = require(\"child_process\"); const cpd = process.env.CLAUDE_PROJECT_DIR; let base = cpd && path.isAbsolute(cpd) ? cpd : process.cwd(); try { const gitDir = execSync(\"git rev-parse --git-common-dir\", { cwd: base, stdio: \"pipe\" }).toString().trim(); base = path.resolve(base, gitDir, \"..\"); } catch (e) { /* not a git repo or git missing — keep base */ } console.log(base);') && node \"$WOLF_ROOT/.wolf/hooks/post-write.js\"",
+            "timeout": 10,
+            "_managedBy": "openwolf"
           }
         ]
       }
@@ -62,8 +67,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.wolf/hooks/stop.js\"",
-            "timeout": 10
+            "command": "WOLF_ROOT=$(node -e 'const path = require(\"path\"); const { execSync } = require(\"child_process\"); const cpd = process.env.CLAUDE_PROJECT_DIR; let base = cpd && path.isAbsolute(cpd) ? cpd : process.cwd(); try { const gitDir = execSync(\"git rev-parse --git-common-dir\", { cwd: base, stdio: \"pipe\" }).toString().trim(); base = path.resolve(base, gitDir, \"..\"); } catch (e) { /* not a git repo or git missing — keep base */ } console.log(base);') && node \"$WOLF_ROOT/.wolf/hooks/stop.js\"",
+            "timeout": 10,
+            "_managedBy": "openwolf"
           }
         ]
       }
